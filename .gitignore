@@ -1,1 +1,4 @@
+*.tif
+convert_map.py
+__pycache__/
 .venv/
