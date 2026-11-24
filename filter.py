@@ -9,13 +9,11 @@ _COS_TILTS = np.cos(BEAM_TILTS)
 class ParticleFilter:
     def __init__(
         self,
-        height_map: np.ndarray,
-        num_particles: int = NUM_PARTICLES,
-    ) -> None:
-        if num_particles <= 0:
-            raise ValueError("num_particles должно быть положительным числом")
+        height_map: np.ndarray, # двумерная карта высот
+        num_particles: int = NUM_PARTICLES # число частиц/гипотез
+    ):
+        if num_particles <= 0: raise ValueError("num_particles должно быть положительным числом")
 
-        # инициализация переменных
         self.height_map = np.asarray(height_map, dtype=np.float64)
         self.num_particles = int(num_particles)
 
@@ -25,6 +23,8 @@ class ParticleFilter:
 
         # начальный курс по умолчанию
         self.yaw = 0.0
+    
+    
 
 # переводит измеренные дальности 51 луча лидара в смещения (dx, dy, dz)
 # относительно дрона в координатах карты
