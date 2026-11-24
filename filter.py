@@ -1,9 +1,30 @@
 import numpy as np
-from config import BEAM_TILTS, BEAM_AZIMUTHS
+from config import BEAM_TILTS, BEAM_AZIMUTHS, NUM_PARTICLES
 
 # считаем синусы и косинусы наклонов для скорости
 _SIN_TILTS = np.sin(BEAM_TILTS)
 _COS_TILTS = np.cos(BEAM_TILTS)
+
+# фильтр частиц для оценки состояния дрона по карте высот
+class ParticleFilter:
+    def __init__(
+        self,
+        height_map: np.ndarray,
+        num_particles: int = NUM_PARTICLES,
+    ) -> None:
+        if num_particles <= 0:
+            raise ValueError("num_particles должно быть положительным числом")
+
+        # инициализация переменных
+        self.height_map = np.asarray(height_map, dtype=np.float64)
+        self.num_particles = int(num_particles)
+
+        # пустые структуры под облако частиц (x, y, z, yaw) и веса
+        self.particles = np.zeros((self.num_particles, 4), dtype=np.float64)
+        self.weights = np.zeros(self.num_particles, dtype=np.float64)
+
+        # начальный курс по умолчанию
+        self.yaw = 0.0
 
 # переводит измеренные дальности 51 луча лидара в смещения (dx, dy, dz)
 # относительно дрона в координатах карты
