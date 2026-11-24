@@ -17,12 +17,10 @@ class ParticleFilter:
         self.height_map = np.asarray(height_map, dtype=np.float64)
         self.num_particles = int(num_particles)
 
-        # пустые структуры под облако частиц (x, y, z, yaw) и веса
-        self.particles = np.zeros((self.num_particles, 4), dtype=np.float64)
-        self.weights = np.zeros(self.num_particles, dtype=np.float64)
+        self.particles = np.zeros((self.num_particles, 4), dtype=np.float64) # матрица гипотез
+        self.weights = np.zeros(self.num_particles, dtype=np.float64) # вектор весов (долей вероятности для частиц)
 
-        # начальный курс по умолчанию
-        self.yaw = 0.0
+        self.yaw = 0.0 # начальный курс по умолчанию
     
     
 
