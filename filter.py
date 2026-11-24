@@ -1,5 +1,5 @@
 import numpy as np
-from config import BEAM_TILTS, BEAM_AZIMUTHS, NUM_PARTICLES
+from config import BEAM_TILTS, BEAM_AZIMUTHS, NUM_PARTICLES, MAP_RESOLUTION
 
 # считаем синусы и косинусы наклонов для скорости
 _SIN_TILTS = np.sin(BEAM_TILTS)
@@ -21,6 +21,44 @@ class ParticleFilter:
         self.weights = np.zeros(self.num_particles, dtype=np.float64) # вектор весов (долей вероятности для частиц)
 
         self.yaw = 0.0 # начальный курс по умолчанию
+
+    # Возвращает высоту рельефа H[x, y] по координатам в метрах
+    def sample_terrain_height(self, x: np.ndarray, y: np.ndarray) -> np.ndarray: # AI
+        rows, cols = self.height_map.shape
+        ix = np.clip(np.floor(x / MAP_RESOLUTION).astype(np.int64), 0, cols - 1)
+        iy = np.clip(np.floor(y / MAP_RESOLUTION).astype(np.int64), 0, rows - 1)
+        return self.height_map[iy, ix]
+
+    # равномерно распределяет координаты x, y для N частиц по площади карты
+    # выставляет высоту z = H[x, y] + center_range 
+    # задает равные веса 1 / N 
+    def initialize( # AI
+        self,
+        center_range: float, # расстояние до вертикальной точки
+        init_yaw: float = 0.0, # начальный курс
+        rng: np.random.Generator | None = None,
+    ):
+        if rng is None:
+            rng = np.random.default_rng()
+
+        rows, cols = self.height_map.shape
+        max_x = cols * MAP_RESOLUTION
+        max_y = rows * MAP_RESOLUTION
+
+        x = rng.uniform(0.0, max_x, size=self.num_particles)
+        y = rng.uniform(0.0, max_y, size=self.num_particles)
+        terrain_z = self.sample_terrain_height(x, y)
+        z = terrain_z + float(center_range)
+
+        self.yaw = float(init_yaw)
+        self.particles[:, 0] = x
+        self.particles[:, 1] = y
+        self.particles[:, 2] = z
+        self.particles[:, 3] = self.yaw
+
+        self.weights.fill(1.0 / self.num_particles) # выставляет веса
+
+    
     
     
 
