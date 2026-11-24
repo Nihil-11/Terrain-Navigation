@@ -1,19 +1,9 @@
 import numpy as np
-from config import NUM_BEAMS, LIDAR_TILT_RAD
-
-# Предвычисляем геометрию 51 луча (выполняется 1 раз при импорте модуля)
-# Индекс 0: наклон 0.0 (строго вниз); индексы 1..50: наклон LIDAR_TILT_RAD[cite: 5]
-_TILTS = np.zeros(NUM_BEAMS, dtype=np.float64)
-_TILTS[1:] = LIDAR_TILT_RAD
-
-# Азимуты: индекс 0 -> 0.0, индексы 1..50 -> равномерно с шагом 2*pi/50 от носа против часовой[cite: 5]
-_AZIMUTHS = np.zeros(NUM_BEAMS, dtype=np.float64)
-_AZIMUTHS[1:] = np.linspace(0.0, 2.0 * np.pi, NUM_BEAMS - 1, endpoint=False)
+from config import NUM_BEAMS, LIDAR_TILT_RAD, BEAM_TILTS, BEAM_AZIMUTHS
 
 # Заранее считаем синусы и косинусы наклонов для скорости
-_SIN_TILTS = np.sin(_TILTS)
-_COS_TILTS = np.cos(_TILTS)
-
+_SIN_TILTS = np.sin(BEAM_TILTS)
+_COS_TILTS = np.cos(BEAM_TILTS)
 
 def get_lidar_offsets(distances: np.ndarray, yaw: float) -> np.ndarray:
     """
@@ -31,7 +21,7 @@ def get_lidar_offsets(distances: np.ndarray, yaw: float) -> np.ndarray:
     dz = -distances * _COS_TILTS
 
     # Поворот в плоскость карты с учетом курса yaw[cite: 9]
-    angles = yaw + _AZIMUTHS
+    angles = yaw + BEAM_AZIMUTHS
     dx = r * np.cos(angles)
     dy = r * np.sin(angles)
 
