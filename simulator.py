@@ -1,10 +1,12 @@
 import numpy as np
 from config import (
     TERRAIN_FILE,
+    NUM_STEPS,
     MAP_SIZE,
     MAP_RESOLUTION,
     DT,
     LIDAR_MAX_RANGE,
+    LIDAR_TILT_RAD,
     BEAM_TILTS,
     BEAM_AZIMUTHS,  
     DEFAULT_NOISE_CFG,
@@ -25,7 +27,7 @@ def get_height(height_map, x, y):
     iy = np.floor(y_arr / MAP_RESOLUTION).astype(np.int64)
 
     ix = np.clip(ix, 0, height_map.shape[0] - 1) # ограничивает значения элементов массива заданным интервалом
-    iy = np.clip(iy, 0, height_map.shape[1] - 1)
+    iy = np.clip(iy, 0, height_map.shape[1] - 1)        
     
     return height_map[ix, iy]
 """
@@ -44,25 +46,49 @@ def get_height(height_map, x, y):
  """
     
 class DroneSimulator:
-    def __init__(self, height_map, noise_cfg=None, margin=1000.0, start_z=550.0, speed = 15, seed=None):
+    def __init__(self, height_map, route_name="straight", noise_cfg=None, margin=1000.0, start_z=550.0, speed = 15, seed=None):
         self.height_map = height_map
+        self.route_name = route_name
         self.noise_cfg = DEFAULT_NOISE_CFG if noise_cfg is None else noise_cfg #ai
         self.rng = np.random.default_rng(seed)
         self.speed = speed
+        self.step_count = 0
 
-        max_x = height_map.shape[0] * MAP_RESOLUTION
-        max_y = height_map.shape[1] * MAP_RESOLUTION
-
-        self.true_x = self.rng.uniform(margin, max_x - margin)
-        self.true_y = self.rng.uniform(margin, max_y - margin)
+        self.max_x = height_map.shape[0] * MAP_RESOLUTION
+        self.max_y = height_map.shape[1] * MAP_RESOLUTION
         self.true_z = float(start_z)
+
+        max_flight_dist = self.speed * NUM_STEPS * DT
+        max_cone_radius = self.true_z * np.tan(LIDAR_TILT_RAD)
+        min_safe_margin = max_flight_dist + max_cone_radius
+        if margin < min_safe_margin:
+            raise ValueError(f"Слишком маленький margin={margin:.1f} м нужно минимум {min_safe_margin:.1f} м")
+
+        self.true_x = self.rng.uniform(margin, self.max_x - margin)
+        self.true_y = self.rng.uniform(margin, self.max_y - margin)
         self.true_yaw = self.rng.uniform(-np.pi, np.pi)
         self.start_yaw = self.true_yaw
 
-        self.cone_tilt = 20.0
-        self.cone_azimuths = np.linspace(0.0, 360.0, 50, endpoint=False)
+    def get_turn_rate(self): #ai
+        t = self.step_count * DT
+
+        if self.route_name == "straight":
+            return 0.0
+
+        if self.route_name == "snake":
+            return 0.25 * np.cos(2.0 * np.pi * t / 20.0)
+
+        if self.route_name == "maneuver":
+            if 15.0 <= t < 17.0:
+                return np.pi / 4.0      # поворот на +90 град за 2 сек
+            if 30.0 <= t < 33.0:
+                return -np.pi / 3.0     # разворот на -180 град за 3 сек
+            return 0.0
+
+        raise ValueError(f"Неизвестный маршрут: {self.route_name}") #ai
 
     def move(self, turn_rate=0.0):
+        
         self.true_yaw += turn_rate * DT
         self.true_x += self.speed * np.cos(self.true_yaw) * DT
         self.true_y += self.speed * np.sin(self.true_yaw) * DT
@@ -71,7 +97,7 @@ class DroneSimulator:
         gyro_std = self.noise_cfg["gyro_std"]
 
         measured_dist = self.speed * DT + self.rng.normal(0.0, accel_std) #ai
-        measured_dyaw = turn_rate * DT + self.rng.normal(0.0, gyro_std) #ai
+        measured_dyaw = (turn_rate + self.rng.normal(0.0, gyro_std)) * DT #ai
         return measured_dist, measured_dyaw
 
     def measure_vertical_lidar(self):
@@ -96,7 +122,7 @@ class DroneSimulator:
         hits = zs <= ground
 
         if np.any(hits):
-            i = np.argmax(hits)
+            i = np.argmax(hits) # берет первый индекс появившегося True 
             true_range = np.sqrt(
                 (xs[i] - self.true_x) ** 2
                 + (ys[i] - self.true_y) ** 2
@@ -105,7 +131,8 @@ class DroneSimulator:
         else:
             true_range = LIDAR_MAX_RANGE
 
-        noisy_range = true_range + self.rng.normal(0.0, 0.5)
+        lidar_std = self.noise_cfg["lidar_std"]
+        noisy_range = true_range + self.rng.normal(0.0, lidar_std)
         return float(np.clip(noisy_range, 0.0, LIDAR_MAX_RANGE))
 
     def measure_lidar(self):
@@ -114,8 +141,17 @@ class DroneSimulator:
             ranges.append(self.cast_ray(tilt_rad, azim_rad))
         return np.array(ranges, dtype=np.float64)
 
-    def get_initial_measurement(self):
+
+    def get_initial_measurement(self): # функция для первого появления дрона (t = 0)
         return self.measure_lidar(), self.start_yaw
+    
+
+    def step(self):
+        turn_rate = self.get_turn_rate()
+        measured_dist, measured_dyaw = self.move(turn_rate=turn_rate)
+        lidar_ranges = self.measure_lidar()
+        self.step_count += 1
+        return lidar_ranges, measured_dist, measured_dyaw
 
     def get_true_state(self):
         return self.true_x, self.true_y, self.true_z, self.true_yaw
@@ -123,12 +159,13 @@ class DroneSimulator:
 
 if __name__ == "__main__":
     H = generate_map()
-    print(f"Карта: shape={H.shape}, min={H.min():.2f} м, max={H.max():.2f} м")
+    sim = DroneSimulator(H, route_name="snake", noise_cfg=ZERO_NOISE_CFG, seed=10)
+    x0, y0, z0, yaw0 = sim.get_true_state()
 
-    sim = DroneSimulator(H, noise_cfg=ZERO_NOISE_CFG, seed=42)
-    scan, start_yaw = sim.get_initial_measurement()
-    x, y, z, yaw = sim.get_true_state()
-    true_center = z - get_height(H, x, y)
+    for _ in range(NUM_STEPS):
+        lidar, dist, dyaw = sim.step()
 
-    print(f"Центральный луч: {scan[0]:.2f} м (истина: {true_center:.2f} м)")
-    print(f"Конус (50 лучей): min={scan[1:].min():.2f} м, max={scan[1:].max():.2f} м")
+    x1, y1, z1, yaw1 = sim.get_true_state()
+    print(f"Старт: x={x0:.2f}, y={y0:.2f}, yaw={yaw0:.3f}")
+    print(f"Финиш: x={x1:.2f}, y={y1:.2f}, yaw={yaw1:.3f}")
+    print(f"Последний скан: центр={lidar[0]:.2f} м, конус min={lidar[1:].min():.2f} м, max={lidar[1:].max():.2f} м")
