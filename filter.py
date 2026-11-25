@@ -1,5 +1,6 @@
 import numpy as np
-from config import BEAM_TILTS, BEAM_AZIMUTHS, NUM_PARTICLES, MAP_RESOLUTION
+from config import BEAM_TILTS, BEAM_AZIMUTHS, NUM_PARTICLES, MAP_RESOLUTION, MAP_SIZE_METERS
+from simulator import get_height, wrap_angle
 
 # считаем синусы и косинусы наклонов для скорости
 _SIN_TILTS = np.sin(BEAM_TILTS)
@@ -22,45 +23,35 @@ class ParticleFilter:
 
         self.yaw = 0.0 # начальный курс по умолчанию
 
-    # Возвращает высоту рельефа H[x, y] по координатам в метрах
-    def sample_terrain_height(self, x: np.ndarray, y: np.ndarray) -> np.ndarray: # AI
-        rows, cols = self.height_map.shape
-        ix = np.clip(np.floor(x / MAP_RESOLUTION).astype(np.int64), 0, cols - 1)
-        iy = np.clip(np.floor(y / MAP_RESOLUTION).astype(np.int64), 0, rows - 1)
-        return self.height_map[iy, ix]
-
     # равномерно распределяет координаты x, y для N частиц по площади карты
-    # выставляет высоту z = H[x, y] + center_range 
+    # выставляет высоту z = высота рельефа + расстояние от дрона до верт. точки
     # задает равные веса 1 / N 
     def initialize( # AI
         self,
         center_range: float, # расстояние до вертикальной точки
-        init_yaw: float = 0.0, # начальный курс
+        start_yaw: float = 0.0, # начальный курс
+        init_yaw_std: float = 0.02, # шум
         rng: np.random.Generator | None = None,
     ):
         if rng is None:
             rng = np.random.default_rng()
 
-        rows, cols = self.height_map.shape
-        max_x = cols * MAP_RESOLUTION
-        max_y = rows * MAP_RESOLUTION
+        x = rng.uniform(0.0, MAP_SIZE_METERS, size=self.num_particles)
+        y = rng.uniform(0.0, MAP_SIZE_METERS, size=self.num_particles)
 
-        x = rng.uniform(0.0, max_x, size=self.num_particles)
-        y = rng.uniform(0.0, max_y, size=self.num_particles)
-        terrain_z = self.sample_terrain_height(x, y)
+        terrain_z = get_height(self.height_map, x, y)
         z = terrain_z + float(center_range)
 
-        self.yaw = float(init_yaw)
+        self.yaw = float(wrap_angle(float(start_yaw)))
+        yaw_noise = rng.normal(0.0, init_yaw_std, size=self.num_particles) if init_yaw_std > 0.0 else 0.0
+        particle_yaw = wrap_angle(self.yaw + yaw_noise)
+
         self.particles[:, 0] = x
         self.particles[:, 1] = y
         self.particles[:, 2] = z
-        self.particles[:, 3] = self.yaw
+        self.particles[:, 3] = particle_yaw
 
-        self.weights.fill(1.0 / self.num_particles) # выставляет веса
-
-    
-    
-    
+        self.weights.fill(1.0 / self.num_particles)
 
 # переводит измеренные дальности 51 луча лидара в смещения (dx, dy, dz)
 # относительно дрона в координатах карты
