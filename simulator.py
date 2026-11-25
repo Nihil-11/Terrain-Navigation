@@ -1,5 +1,15 @@
 import numpy as np
-from config import TERRAIN_FILE, MAP_SIZE, MAP_RESOLUTION, DT, LIDAR_MAX_RANGE
+from config import (
+    TERRAIN_FILE,
+    MAP_SIZE,
+    MAP_RESOLUTION,
+    DT,
+    LIDAR_MAX_RANGE,
+    BEAM_TILTS,
+    BEAM_AZIMUTHS,  
+    DEFAULT_NOISE_CFG,
+    ZERO_NOISE_CFG,
+)
 
 def generate_map(size=MAP_SIZE, seed=10):
     H = np.load(TERRAIN_FILE)
@@ -47,6 +57,9 @@ class DroneSimulator:
         self.true_z = start_z
         self.true_yaw = self.rng.uniform(-np.pi, np.pi)
 
+        self.cone_tilt = 20.0
+        self.cone_azimuths = np.linspace(0.0, 360.0, 50, endpoint=False)
+
     def move(self, turn_rate=0.0):
         self.true_yaw += turn_rate * DT
         self.true_x += self.speed * np.cos(self.true_yaw) * DT
@@ -61,6 +74,41 @@ class DroneSimulator:
         true_range = self.true_z - ground
         noise_range = true_range + self.rng.normal(0.0, 0.5)
         return float(np.clip(noise_range, 0.0, LIDAR_MAX_RANGE))
+
+    def cast_ray(self, tilt_rad=0.0, azimuth_rad=0.0):
+        angle = self.true_yaw + azimuth_rad
+        R = self.true_z * np.tan(tilt_rad)
+
+        end_x = self.true_x + R * np.cos(angle)
+        end_y = self.true_y + R * np.sin(angle)
+
+        # 2. Делим отрезок дрона до пола на 600 точек
+        xs = np.linspace(self.true_x, end_x, 600)
+        ys = np.linspace(self.true_y, end_y, 600)
+        zs = np.linspace(self.true_z, 0.0, 600)
+
+        # 3. Сверяем высоту луча с картой и берем первое пересечение
+        ground = get_height(self.height_map, xs, ys)
+        hits = zs <= ground
+
+        if np.any(hits):
+            i = np.argmax(hits)
+            true_range = np.sqrt(
+                (xs[i] - self.true_x) ** 2
+                + (ys[i] - self.true_y) ** 2
+                + (zs[i] - self.true_z) ** 2
+            )
+        else:
+            true_range = LIDAR_MAX_RANGE
+
+        noisy_range = true_range + self.rng.normal(0.0, 0.5)
+        return float(np.clip(noisy_range, 0.0, LIDAR_MAX_RANGE))
+
+    def measure_lidar(self):
+        ranges = [self.measure_vertical_lidar()]
+        for tilt_rad, azim_rad in zip(BEAM_TILTS[1:], BEAM_AZIMUTHS[1:]):
+            ranges.append(self.cast_ray(tilt_rad, azim_rad))
+        return np.array(ranges, dtype=np.float64)
 
     def get_true_state(self):
         return self.true_x, self.true_y, self.true_z, self.true_yaw
