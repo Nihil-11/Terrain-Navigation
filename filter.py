@@ -69,6 +69,7 @@ class ParticleFilter:
 
         self.weights.fill(1.0 / self.num_particles) # обновление весов для многократ. вызова initialize
 
+    # обновление весов перед предсказанием
     def update_weights(
         self,
         lidar_ranges: np.ndarray, # длины лучей с лидара
@@ -116,6 +117,7 @@ class ParticleFilter:
             self.weights.fill(1.0 / self.num_particles)
         else: self.weights = raw_w / weight_sum
 
+    # предсказание, где дрон
     def predict(
         self,
         measured_dyaw: float, # изменение курса за шаг dt
