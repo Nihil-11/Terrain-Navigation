@@ -13,10 +13,6 @@ from config import (
 )
 from simulator import get_height, wrap_angle
 
-# считаем синусы и косинусы наклонов для скорости
-_SIN_TILTS = np.sin(BEAM_TILTS)
-_COS_TILTS = np.cos(BEAM_TILTS)
-
 # фильтр частиц для оценки состояния дрона по карте высот
 class ParticleFilter:
     def __init__(
@@ -79,8 +75,8 @@ class ParticleFilter:
         ranges = np.asarray(lidar_ranges, dtype=np.float64) # копия длин лучей с лидара
 
         # горизонт. вынос и вертикальное смещение для 51 луча: (51,)
-        horiz = ranges * _SIN_TILTS
-        dz = -ranges * _COS_TILTS
+        horiz = ranges * np.sin(BEAM_TILTS)
+        dz = -ranges *  np.cos(BEAM_TILTS)
 
         # глобальные азимуты лучей для каждой частицы: (N, 51)
         angles = self.particles[:, 3:4] + BEAM_AZIMUTHS[None, :]
