@@ -9,6 +9,7 @@ from config import (
     DT,
     GYRO_NOISE_STD,
     ACCEL_NOISE_STD,
+    MARGIN,
 )
 from simulator import get_height, wrap_angle
 
@@ -50,11 +51,19 @@ class ParticleFilter:
         if rng is None:
             rng = np.random.default_rng()
 
+        if MARGIN is not None:
+            m = float(MARGIN)
+            if m < 0.0 or 2.0 * m >= MAP_SIZE_METERS:
+                raise ValueError("Некорректное значение margin для размера карты")
+            low, high = m, MAP_SIZE_METERS - m
+        else:
+            low, high = 0.0, MAP_SIZE_METERS
+
         self.yaw = float(wrap_angle(float(start_yaw))) # чтобы угол yaw был в полуинтервале [-pi, pi)
         yaw_noise = rng.normal(0.0, init_yaw_std, size=self.num_particles) if init_yaw_std > 0.0 else 0.0
 
-        self.particles[:, 0] = rng.uniform(0.0, MAP_SIZE_METERS, size=self.num_particles) # xi
-        self.particles[:, 1] = rng.uniform(0.0, MAP_SIZE_METERS, size=self.num_particles) # yi
+        self.particles[:, 0] = rng.uniform(low, high, size=self.num_particles) # xi
+        self.particles[:, 1] = rng.uniform(low, high, size=self.num_particles) # yi
         self.particles[:, 2] = float(FIXED_ALTITUDE_Z) # zi
         self.particles[:, 3] = wrap_angle(self.yaw + yaw_noise) # yawi (yaw частицы)
 
@@ -64,7 +73,7 @@ class ParticleFilter:
         self,
         lidar_ranges: np.ndarray, # длины лучей с лидара
         sigma_eff: float = 3.0, # эффективное стандартное отклонение
-        out_of_bounds_penalty: float = 100.0, # сильный штраф, если луч ударил за карту 
+        out_of_bounds_penalty: float = 100.0, # сильный штраф за уход луча за карту (чтоб потом его откинуть) 
     ):
         ranges = np.asarray(lidar_ranges, dtype=np.float64) # копия длин лучей с лидара
 
@@ -101,22 +110,21 @@ class ParticleFilter:
         log_w = log_w - np.max(log_w)
         raw_w = np.exp(log_w)
 
+        # распределение весов
         weight_sum = np.sum(raw_w)
         if not np.isfinite(weight_sum) or weight_sum <= 0.0:
             self.weights.fill(1.0 / self.num_particles)
-        else:
-            self.weights = raw_w / weight_sum
+        else: self.weights = raw_w / weight_sum
 
     def predict(
         self,
-        measured_dyaw: float,
-        dt: float = DT,
-        gyro_noise_std: float = GYRO_NOISE_STD,
-        accel_noise_std: float = ACCEL_NOISE_STD,
+        measured_dyaw: float, # изменение курса за шаг dt
+        dt: float = DT, # шаг времени
+        gyro_noise_std: float = GYRO_NOISE_STD, # стандартное отклонение шума гироскопа (угловой скорости)
+        accel_noise_std: float = ACCEL_NOISE_STD, # стандартное отклонение шума величины шага за такт (шум уск.)
         rng: np.random.Generator | None = None,
     ):
-        if rng is None:
-            rng = np.random.default_rng()
+        if rng is None: rng = np.random.default_rng()
 
         # курс для каждой частицы с шумом гироскопа
         yaw_std = gyro_noise_std * dt
