@@ -161,3 +161,42 @@ class ParticleFilter:
         self.particles[:, 3] = new_yaw
 
         self.yaw = float(wrap_angle(self.yaw + measured_dyaw)) # изменение курса
+
+    # отбор гипотез и удаление слабых гипотез
+    # используется кум. сумма весов в отрезке [0; 1]
+    def resample(
+        self,
+        rng: np.random.Generator | None = None,
+    ):
+        if rng is None: rng = np.random.default_rng()
+
+        n = self.num_particles
+
+        # защита на случай некорректной или вырожденной суммы весов
+        weight_sum = np.sum(self.weights)
+        if not np.isfinite(weight_sum) or weight_sum <= 0.0:
+            weights = np.full(n, 1.0 / n, dtype=np.float64)
+        else: weights = self.weights / weight_sum
+
+        cdf = np.cumsum(weights) # кум. сумма весов образует интервал [0; 1]
+        cdf[-1] = 1.0 # правый конец интервала = 1 (пишу явно, чтобы не было например 0.99998 тк float)
+
+        # случайный сдвиг в первом интервале [0, 1/n)
+        u0 = rng.uniform(0.0, 1.0 / n)
+
+        # позиция на интервале для N частиц с учетом сдвига u0 и шагом 1/n 
+        positions = u0 + np.arange(n, dtype=np.float64) / n 
+
+        # для каждой точки из positions берется индекс интервала из cdf, в который эта точка попала  
+        # side="right" для того, чтобы точка на конце интервала относилась к след. интервалу
+        indices = np.searchsorted(cdf, positions, side="right")
+        indices = np.clip(indices, 0, n - 1)
+
+        resampled = self.particles[indices].copy()
+        resampled[:, 0] = np.clip(resampled[:, 0], 0.0, MAP_SIZE_METERS) # ограничение координат для страховки
+        resampled[:, 1] = np.clip(resampled[:, 1], 0.0, MAP_SIZE_METERS) # ограничение координат для страховки
+        resampled[:, 2] = float(FIXED_ALTITUDE_Z) # высота остается 550м
+        resampled[:, 3] = wrap_angle(resampled[:, 3]) # приводим курс частиц к каноническому диапазону углов
+
+        self.particles = resampled # сохраняем новое состояния частиц
+        self.weights.fill(1.0 / n) # снова закидываем равномерные веса для след. итерации изменения весов
