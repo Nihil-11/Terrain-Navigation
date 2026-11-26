@@ -106,3 +106,48 @@ class ParticleFilter:
             self.weights.fill(1.0 / self.num_particles)
         else:
             self.weights = raw_w / weight_sum
+
+    def predict(
+        self,
+        measured_dyaw: float,
+        dt: float = DT,
+        gyro_noise_std: float = GYRO_NOISE_STD,
+        accel_noise_std: float = ACCEL_NOISE_STD,
+        rng: np.random.Generator | None = None,
+    ):
+        if rng is None:
+            rng = np.random.default_rng()
+
+        # курс для каждой частицы с шумом гироскопа
+        yaw_std = gyro_noise_std * dt
+        yaw_noise = (
+            rng.normal(0.0, yaw_std, size=self.num_particles)
+            if yaw_std > 0.0
+            else 0.0
+        )
+        new_yaw = wrap_angle(self.particles[:, 3] + measured_dyaw + yaw_noise)
+
+        # шаг за dt при фиксированной скорости + индивидуальный шум для каждой частицы
+        base_dist = self.fixed_speed * dt
+        dist_noise = (
+            rng.normal(0.0, accel_noise_std, size=self.num_particles)
+            if accel_noise_std > 0.0
+            else 0.0
+        )
+        step_dist = base_dist + dist_noise
+
+        # сдвиг в плоскости XY с ограничением по карте, z фиксирована на 550 м
+        self.particles[:, 0] = np.clip(
+            self.particles[:, 0] + step_dist * np.cos(new_yaw),
+            0.0,
+            MAP_SIZE_METERS,
+        )
+        self.particles[:, 1] = np.clip(
+            self.particles[:, 1] + step_dist * np.sin(new_yaw),
+            0.0,
+            MAP_SIZE_METERS,
+        )
+        self.particles[:, 2] = float(FIXED_ALTITUDE_Z)
+        self.particles[:, 3] = new_yaw
+
+        self.yaw = float(wrap_angle(self.yaw + measured_dyaw)) # изменение курса
