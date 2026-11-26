@@ -60,8 +60,6 @@ from config import (
 - lidar_ranges: массив из 51 замера (0-й строго вниз, 1..50 по конусу, м)
 """
 
-
-
 def generate_map(size=MAP_SIZE, seed=10):
     H = np.load(TERRAIN_FILE)
     H = H.astype(np.float64) # распаковываем из float32 в float64
@@ -93,7 +91,7 @@ def get_height(height_map, x, y):
     elif iy > 2499:
         iy = 2499
  """
-    
+
 class DroneSimulator:
     def __init__(self, height_map, route_name="straight", noise_cfg=None, seed=None):
         self.height_map = height_map
@@ -121,7 +119,7 @@ class DroneSimulator:
         self.true_yaw = self.rng.uniform(-np.pi, np.pi)
         self.start_yaw = self.true_yaw
 
-    def get_turn_rate(self): #ai
+    def get_turn_rate(self):
         t = self.step_count * DT
 
         if self.route_name == "straight":
@@ -130,7 +128,7 @@ class DroneSimulator:
         if self.route_name == "snake":
             return 0.25 * np.cos(2.0 * np.pi * t / 20.0)
 
-        if self.route_name == "maneuver":
+        if self.route_name == "maneuver": #ai
             if 15.0 <= t < 17.0:
                 return np.pi / 4.0      # поворот на +90 град за 2 сек
             if 30.0 <= t < 33.0:
@@ -212,7 +210,7 @@ class DroneSimulator:
 if __name__ == "__main__":
     """
     H = generate_map()
-    sim = DroneSimulator(H, route_name="snake", noise_cfg=DEFAULT_NOISE_CFG, seed=10)
+    sim = DroneSimulator(H, route_name="snake", noise_cfg=DEFAULT_NOISE_CFG, seed=None)
     x0, y0, z0, yaw0 = sim.get_true_state()
 
     for _ in range(NUM_STEPS):

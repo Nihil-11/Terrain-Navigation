@@ -50,7 +50,7 @@ class DroneVisualizer:
         )
         (self.heading_line,) = self.ax_drone.plot([], [], color="black", linewidth=2.0)
 
-        # Пунктирный круг: примерный радиус конуса лидара на земле (~200 м)
+        # Пунктирный круг: примерный радиус конуса лидара на земле 200 м
         cone_radius = FIXED_ALTITUDE_Z * np.tan(LIDAR_TILT_RAD)
         self.cone_circle = Circle(
             (0.0, 0.0),
@@ -75,7 +75,7 @@ class DroneVisualizer:
         self.drone_dot.set_data([x], [y])
 
         # Короткая стрелка-линия длиной 120 м, показывающая направление носа дрона
-        nose_len = 120.0
+        nose_len = 100.0
         self.heading_line.set_data(
             [x, x + nose_len * np.cos(yaw)],
             [y, y + nose_len * np.sin(yaw)],
@@ -109,7 +109,7 @@ if __name__ == "__main__":
         sim.step()
         x, y, z, yaw = sim.get_true_state()
 
-        # Обновляем картинку каждые 5 шагов, чтобы анимация шла бодро и без лагов
+        # Обновляем картинку каждые 5 шагов
         if step % 10== 0:
             vis.update(x, y, yaw, step=step)
 
