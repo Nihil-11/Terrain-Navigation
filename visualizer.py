@@ -110,7 +110,7 @@ if __name__ == "__main__":
         x, y, z, yaw = sim.get_true_state()
 
         # Обновляем картинку каждые 5 шагов, чтобы анимация шла бодро и без лагов
-        if step % 1 == 0:
+        if step % 10== 0:
             vis.update(x, y, yaw, step=step)
 
     vis.finish()
