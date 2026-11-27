@@ -67,7 +67,52 @@ class ParticleFilter:
 
         self.weights.fill(1.0 / self.num_particles) # обновление весов для многократ. вызова initialize
 
-    # обновление весов перед предсказанием
+    # предсказание, где дрон (сдвиг частиц с учетом шумов)
+    def predict(
+        self,
+        measured_dyaw: float, # изменение курса за шаг dt
+        dt: float = DT, # шаг времени
+        gyro_noise_std: float = GYRO_NOISE_STD, # стандартное отклонение шума гироскопа (угловой скорости)
+        accel_noise_std: float = ACCEL_NOISE_STD, # стандартное отклонение шума величины шага за такт (шум уск.)
+        rng: np.random.Generator | None = None,
+    ):
+        if rng is None: rng = np.random.default_rng()
+
+        # курс для каждой частицы с шумом гироскопа
+        yaw_std = gyro_noise_std * dt
+        yaw_noise = (
+            rng.normal(0.0, yaw_std, size=self.num_particles)
+            if yaw_std > 0.0
+            else 0.0
+        )
+        new_yaw = wrap_angle(self.particles[:, 3] + measured_dyaw + yaw_noise)
+
+        # шаг за dt при фиксированной скорости + индивидуальный шум для каждой частицы
+        base_dist = self.fixed_speed * dt
+        dist_noise = (
+            rng.normal(0.0, accel_noise_std, size=self.num_particles)
+            if accel_noise_std > 0.0
+            else 0.0
+        )
+        step_dist = base_dist + dist_noise
+
+        # сдвиг в плоскости XY с ограничением по карте, z фиксирована на 550 м
+        self.particles[:, 0] = np.clip(
+            self.particles[:, 0] + step_dist * np.cos(new_yaw),
+            0.0,
+            MAP_SIZE_METERS,
+        )
+        self.particles[:, 1] = np.clip(
+            self.particles[:, 1] + step_dist * np.sin(new_yaw),
+            0.0,
+            MAP_SIZE_METERS,
+        )
+        self.particles[:, 2] = float(FIXED_ALTITUDE_Z)
+        self.particles[:, 3] = new_yaw
+
+        self.yaw = float(wrap_angle(self.yaw + measured_dyaw)) # изменение курса
+
+    # обновление весов через MSE и Гауссово правдоподобие на основе предсказания
     def update_weights(
         self,
         lidar_ranges: np.ndarray, # длины лучей с лидара
@@ -131,52 +176,7 @@ class ParticleFilter:
         else:
             self.weights = raw_w / weight_sum
 
-    # предсказание, где дрон
-    def predict(
-        self,
-        measured_dyaw: float, # изменение курса за шаг dt
-        dt: float = DT, # шаг времени
-        gyro_noise_std: float = GYRO_NOISE_STD, # стандартное отклонение шума гироскопа (угловой скорости)
-        accel_noise_std: float = ACCEL_NOISE_STD, # стандартное отклонение шума величины шага за такт (шум уск.)
-        rng: np.random.Generator | None = None,
-    ):
-        if rng is None: rng = np.random.default_rng()
-
-        # курс для каждой частицы с шумом гироскопа
-        yaw_std = gyro_noise_std * dt
-        yaw_noise = (
-            rng.normal(0.0, yaw_std, size=self.num_particles)
-            if yaw_std > 0.0
-            else 0.0
-        )
-        new_yaw = wrap_angle(self.particles[:, 3] + measured_dyaw + yaw_noise)
-
-        # шаг за dt при фиксированной скорости + индивидуальный шум для каждой частицы
-        base_dist = self.fixed_speed * dt
-        dist_noise = (
-            rng.normal(0.0, accel_noise_std, size=self.num_particles)
-            if accel_noise_std > 0.0
-            else 0.0
-        )
-        step_dist = base_dist + dist_noise
-
-        # сдвиг в плоскости XY с ограничением по карте, z фиксирована на 550 м
-        self.particles[:, 0] = np.clip(
-            self.particles[:, 0] + step_dist * np.cos(new_yaw),
-            0.0,
-            MAP_SIZE_METERS,
-        )
-        self.particles[:, 1] = np.clip(
-            self.particles[:, 1] + step_dist * np.sin(new_yaw),
-            0.0,
-            MAP_SIZE_METERS,
-        )
-        self.particles[:, 2] = float(FIXED_ALTITUDE_Z)
-        self.particles[:, 3] = new_yaw
-
-        self.yaw = float(wrap_angle(self.yaw + measured_dyaw)) # изменение курса
-
-    # итоговая оценка состояния [x, y, z, yaw] по облаку частиц и их весам
+    # итоговая оценка состояния [x, y, z, yaw] по облаку частиц и их измененным весам
     def get_estimate(self) -> tuple[float, float, float, float]:
         weights = np.asarray(self.weights, dtype=np.float64)
         weight_sum = np.sum(weights)
@@ -196,8 +196,9 @@ class ParticleFilter:
 
         return est_x, est_y, est_z, est_yaw
 
-    # отбор гипотез и удаление слабых гипотез
-    # используется кум. сумма весов в отрезке [0; 1]
+    # отбор гипотез и удаление слабых гипотез (пересобираем облако)
+    # используется кум. сумма весов в отрезке [0; 1], на нее накладывается N точек (гипотез)
+    # вложенный отрезок (текущая кум. сумма весов) не берется в рассмотрение, если в него не попала ни одна точка 
     def resample(
         self,
         rng: np.random.Generator | None = None,
