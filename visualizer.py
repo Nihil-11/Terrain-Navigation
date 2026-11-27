@@ -163,7 +163,7 @@ if __name__ == "__main__":
     from simulator import generate_map, DroneSimulator
 
     H = generate_map()
-    sim = DroneSimulator(H, route_name="snake", noise_cfg=DEFAULT_NOISE_CFG)
+    sim = DroneSimulator(H, route_name="maneuver", noise_cfg=DEFAULT_NOISE_CFG)
     vis = DroneVisualizer(H)
 
     x0, y0, z0, yaw0 = sim.get_true_state()

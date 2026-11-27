@@ -154,14 +154,14 @@ class DroneSimulator:
     def measure_vertical_lidar(self):
         ground = get_height(self.height_map, self.true_x, self.true_y)
         true_range = self.true_z - ground
-        
+
         if true_range > LIDAR_MAX_RANGE or true_range < 0:
             return ERROR_LEN
         
         true_range = self.true_z - ground
         lidar_std = self.noise_cfg["lidar_std"]
         noise_range = true_range + self.rng.normal(0.0, lidar_std)
-        return float(self.noise_range)
+        return float(noise_range)
 
     def cast_ray(self, tilt_rad=0.0, azimuth_rad=0.0):
         angle = self.true_yaw + azimuth_rad
@@ -192,7 +192,7 @@ class DroneSimulator:
         
         lidar_std = self.noise_cfg["lidar_std"]
         noisy_range = true_range + self.rng.normal(0.0, lidar_std)
-        return float(self.noisy_range)
+        return float(noisy_range)
 
     def measure_lidar(self):
         ranges = [self.measure_vertical_lidar()]
