@@ -70,8 +70,8 @@ class ParticleFilter:
     def update_weights(
         self,
         lidar_ranges: np.ndarray, # длины лучей с лидара
-        sigma_eff: float = 3.0, # эффективное стандартное отклонение
-        out_of_bounds_penalty: float = 100.0, # сильный штраф за уход луча за карту (чтоб потом его откинуть)
+        sigma_eff: float = 6.0, # эффективное стандартное отклонение
+        out_of_bounds_penalty: float = 10000.0, # сильный штраф за уход луча за карту (чтоб потом его откинуть)
     ):
         ranges = np.asarray(lidar_ranges, dtype=np.float64) # длины лучей с лидара: (51,)
 
