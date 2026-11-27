@@ -10,6 +10,7 @@ from config import (
     GYRO_NOISE_STD,
     ACCEL_NOISE_STD,
     MARGIN,
+    ERROR_LEN,
 )
 from simulator import get_height, wrap_angle
 
@@ -70,13 +71,23 @@ class ParticleFilter:
         self,
         lidar_ranges: np.ndarray, # длины лучей с лидара
         sigma_eff: float = 3.0, # эффективное стандартное отклонение
-        out_of_bounds_penalty: float = 100.0, # сильный штраф за уход луча за карту (чтоб потом его откинуть) 
+        out_of_bounds_penalty: float = 100.0, # сильный штраф за уход луча за карту (чтоб потом его откинуть)
     ):
-        ranges = np.asarray(lidar_ranges, dtype=np.float64) # копия длин лучей с лидара
+        ranges = np.asarray(lidar_ranges, dtype=np.float64) # длины лучей с лидара: (51,)
+
+        # отбрасываем ERROR_LEN (-1.0), неположительные и NaN/inf значения длин лучей
+        valid_ranges = (
+            np.isfinite(ranges)
+            & (ranges != float(ERROR_LEN))
+            & (ranges > 0.0)
+        )
+
+        # безопасная длина для тригонометрии (для невалидных лучей результат всё равно не пойдёт в среднее)
+        safe_ranges = np.where(valid_ranges, ranges, 0.0)
 
         # горизонт. вынос и вертикальное смещение для 51 луча: (51,)
-        horiz = ranges * np.sin(BEAM_TILTS)
-        dz = -ranges *  np.cos(BEAM_TILTS)
+        horiz = safe_ranges * np.sin(BEAM_TILTS)
+        dz = -safe_ranges * np.cos(BEAM_TILTS)
 
         # глобальные азимуты лучей для каждой частицы: (N, 51)
         angles = self.particles[:, 3:4] + BEAM_AZIMUTHS[None, :]
@@ -86,7 +97,7 @@ class ParticleFilter:
         hit_y = self.particles[:, 1:2] + horiz[None, :] * np.sin(angles)
         hit_z = self.particles[:, 2:3] + dz[None, :]
 
-        # высота рельефа под каждым концом луча (N, 51)
+        # высота рельефа под каждым концом луча: (N, 51)
         map_h = get_height(self.height_map, hit_x, hit_y)
 
         # квадрат разницы высот + штраф за выход конца луча за [0, MAP_SIZE_METERS]
@@ -99,8 +110,13 @@ class ParticleFilter:
         )
         sq_diff = np.where(oob_mask, sq_diff + out_of_bounds_penalty, sq_diff)
 
-        # MSE по 51 лучу для каждой частицы: (N,)
-        mse = np.mean(sq_diff, axis=1)
+        # усредняем квадрат ошибки только по валидным лучам: (N,)
+        valid_counts = np.sum(valid_ranges)
+        if valid_counts == 0:
+            mse = np.full(self.num_particles, float(out_of_bounds_penalty), dtype=np.float64)
+        else:
+            valid_sq_sum = np.sum(sq_diff[:, valid_ranges], axis=1)
+            mse = valid_sq_sum / float(valid_counts)
 
         # Гауссово правдоподобие в логарифмах с численной стабилизацией
         log_w = -mse / (2.0 * (float(sigma_eff) ** 2))
@@ -111,7 +127,8 @@ class ParticleFilter:
         weight_sum = np.sum(raw_w)
         if not np.isfinite(weight_sum) or weight_sum <= 0.0:
             self.weights.fill(1.0 / self.num_particles)
-        else: self.weights = raw_w / weight_sum
+        else:
+            self.weights = raw_w / weight_sum
 
     # предсказание, где дрон
     def predict(
