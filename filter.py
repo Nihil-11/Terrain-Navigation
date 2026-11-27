@@ -38,6 +38,7 @@ class ParticleFilter:
         self.yaw = 0.0 # начальный курс по умолчанию
 
     # равномерно распределяет координаты x, y для N частиц по площади карты (z фиксирована на 550м)
+    # в пределах границ MARGIN, чтобы лучи не вышли за карту на первом шаге
     # задает равные веса 1 / N 
     def initialize(
         self,
@@ -175,6 +176,26 @@ class ParticleFilter:
 
         self.yaw = float(wrap_angle(self.yaw + measured_dyaw)) # изменение курса
 
+    # итоговая оценка состояния [x, y, z, yaw] по облаку частиц и их весам
+    def get_estimate(self) -> tuple[float, float, float, float]:
+        weights = np.asarray(self.weights, dtype=np.float64)
+        weight_sum = np.sum(weights)
+        if not np.isfinite(weight_sum) or weight_sum <= 0.0:
+            weights = np.full(self.num_particles, 1.0 / self.num_particles, dtype=np.float64)
+        else: weights = weights / weight_sum
+
+        est_x = float(np.sum(weights * self.particles[:, 0]))
+        est_y = float(np.sum(weights * self.particles[:, 1]))
+        est_z = float(np.sum(weights * self.particles[:, 2]))
+
+        cos_mean = float(np.sum(weights * np.cos(self.particles[:, 3])))
+        sin_mean = float(np.sum(weights * np.sin(self.particles[:, 3])))
+        if np.hypot(cos_mean, sin_mean) < 1e-12:
+            est_yaw = float(self.yaw)
+        else: est_yaw = float(wrap_angle(np.arctan2(sin_mean, cos_mean)))
+
+        return est_x, est_y, est_z, est_yaw
+
     # отбор гипотез и удаление слабых гипотез
     # используется кум. сумма весов в отрезке [0; 1]
     def resample(
@@ -213,23 +234,3 @@ class ParticleFilter:
 
         self.particles = resampled # сохраняем новое состояния частиц
         self.weights.fill(1.0 / n) # снова закидываем равномерные веса для след. итерации изменения весов
-
-    # итоговая оценка состояния [x, y, z, yaw] по облаку частиц и их весам
-    def get_estimate(self) -> tuple[float, float, float, float]:
-        weights = np.asarray(self.weights, dtype=np.float64)
-        weight_sum = np.sum(weights)
-        if not np.isfinite(weight_sum) or weight_sum <= 0.0:
-            weights = np.full(self.num_particles, 1.0 / self.num_particles, dtype=np.float64)
-        else: weights = weights / weight_sum
-
-        est_x = float(np.sum(weights * self.particles[:, 0]))
-        est_y = float(np.sum(weights * self.particles[:, 1]))
-        est_z = float(np.sum(weights * self.particles[:, 2]))
-
-        cos_mean = float(np.sum(weights * np.cos(self.particles[:, 3])))
-        sin_mean = float(np.sum(weights * np.sin(self.particles[:, 3])))
-        if np.hypot(cos_mean, sin_mean) < 1e-12:
-            est_yaw = float(self.yaw)
-        else: est_yaw = float(wrap_angle(np.arctan2(sin_mean, cos_mean)))
-
-        return est_x, est_y, est_z, est_yaw
