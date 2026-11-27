@@ -7,6 +7,7 @@ from config import (
     FIXED_ALTITUDE_Z,
     DRONE_FIXED_SPEED,
     MARGIN,
+    ERROR_LEN, 
     DT,
     LIDAR_MAX_RANGE,
     LIDAR_TILT_RAD,
@@ -153,9 +154,14 @@ class DroneSimulator:
     def measure_vertical_lidar(self):
         ground = get_height(self.height_map, self.true_x, self.true_y)
         true_range = self.true_z - ground
+        
+        if true_range > LIDAR_MAX_RANGE or true_range < 0:
+            return ERROR_LEN
+        
+        true_range = self.true_z - ground
         lidar_std = self.noise_cfg["lidar_std"]
         noise_range = true_range + self.rng.normal(0.0, lidar_std)
-        return float(np.clip(noise_range, 0.0, LIDAR_MAX_RANGE))
+        return float(self.noise_range)
 
     def cast_ray(self, tilt_rad=0.0, azimuth_rad=0.0):
         angle = self.true_yaw + azimuth_rad
@@ -171,19 +177,22 @@ class DroneSimulator:
         ground = get_height(self.height_map, xs, ys)  # Сверяем высоту луча с картой и берем первое пересечение
         hits = zs <= ground
 
-        if np.any(hits):
-            i = np.argmax(hits) # берет первый индекс появившегося True 
-            true_range = np.sqrt(
-                (xs[i] - self.true_x) ** 2
-                + (ys[i] - self.true_y) ** 2
-                + (zs[i] - self.true_z) ** 2
-            )
-        else:
-            true_range = LIDAR_MAX_RANGE
+        if not np.any(hits):
+            return ERROR_LEN
 
+        i = np.argmax(hits) # берет первый индекс появившегося True 
+        true_range = np.sqrt(
+            (xs[i] - self.true_x) ** 2
+            + (ys[i] - self.true_y) ** 2
+            + (zs[i] - self.true_z) ** 2
+        )
+
+        if true_range > LIDAR_MAX_RANGE:
+            return ERROR_LEN
+        
         lidar_std = self.noise_cfg["lidar_std"]
         noisy_range = true_range + self.rng.normal(0.0, lidar_std)
-        return float(np.clip(noisy_range, 0.0, LIDAR_MAX_RANGE))
+        return float(self.noisy_range)
 
     def measure_lidar(self):
         ranges = [self.measure_vertical_lidar()]
