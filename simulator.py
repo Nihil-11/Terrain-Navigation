@@ -93,6 +93,9 @@ def get_height(height_map, x, y):
         iy = 2499
  """
 
+def wrap_angle(angle): # переводит любые углы в круг от -пи до пи 
+    return (angle + np.pi) % (2.0 * np.pi) - np.pi
+
 class DroneSimulator:
     def __init__(self, height_map, route_name="straight", noise_cfg=None, seed=None):
         self.height_map = height_map
