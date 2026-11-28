@@ -5,7 +5,6 @@ from config import (
     NUM_PARTICLES,
     MAP_SIZE_METERS,
     FIXED_ALTITUDE_Z,
-    DRONE_FIXED_SPEED,
     DT,
     GYRO_NOISE_STD,
     ACCEL_NOISE_STD,
@@ -26,7 +25,6 @@ class ParticleFilter:
 
         self.height_map = np.asarray(height_map, dtype=np.float64) # матрица высот
         self.num_particles = int(num_particles) # число частиц
-        self.fixed_speed = float(DRONE_FIXED_SPEED) # постоянная скорость 15 м/с
 
         # состояние частицы [x, y, z, yaw]
         self.particles = np.zeros((self.num_particles, 4), dtype=np.float64)
@@ -46,8 +44,7 @@ class ParticleFilter:
         init_yaw_std: float = 0.02, # шум
         rng: np.random.Generator | None = None,
     ):
-        if rng is None:
-            rng = np.random.default_rng()
+        if rng is None: rng = np.random.default_rng()
 
         if MARGIN is not None:
             m = float(MARGIN)
@@ -71,7 +68,7 @@ class ParticleFilter:
     def predict(
         self,
         measured_dyaw: float, # изменение курса за шаг dt
-        measured_dist: float | None = None, # измеренная дистанция
+        measured_dist: float, # измеренная дистанция
         dt: float = DT, # шаг времени
         gyro_noise_std: float = GYRO_NOISE_STD, # стандартное отклонение шума гироскопа (угловой скорости)
         accel_noise_std: float = ACCEL_NOISE_STD, # стандартное отклонение шума величины шага за такт (шум уск.)
@@ -89,7 +86,7 @@ class ParticleFilter:
         new_yaw = wrap_angle(self.particles[:, 3] + measured_dyaw + yaw_noise)
 
         # шаг за dt при фиксированной скорости + индивидуальный шум для каждой частицы
-        base_dist = self.fixed_speed * dt if measured_dist is None else float(measured_dist)
+        base_dist = float(measured_dist)
         dist_noise = (
             rng.normal(0.0, accel_noise_std, size=self.num_particles)
             if accel_noise_std > 0.0
@@ -117,7 +114,7 @@ class ParticleFilter:
     def update_weights(
         self,
         lidar_ranges: np.ndarray, # длины лучей с лидара
-        sigma_eff: float = 6.0, # эффективное стандартное отклонение
+        sigma_eff: float = 120.0, # эффективное стандартное отклонение
         out_of_bounds_penalty: float = 10000.0, # сильный штраф за уход луча за карту (чтоб потом его откинуть)
     ):
         ranges = np.asarray(lidar_ranges, dtype=np.float64) # длины лучей с лидара: (51,)
