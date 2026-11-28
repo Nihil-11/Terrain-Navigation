@@ -10,13 +10,14 @@ def run_simulation(
     noise_cfg=DEFAULT_NOISE_CFG,
     seed=None,
     visualize=True,
-    vis_every=10,
+    vis_every=20,
 ):
     H = generate_map() # создание карты высот
 
     sim = DroneSimulator(H, route_name=route_name, noise_cfg=noise_cfg, seed=seed) # запуск симуляции дрона
     pf = ParticleFilter(H) # запуск фильтра частиц
     pf_rng = np.random.default_rng(seed) # AI
+    
 
     vis = DroneVisualizer(H) if visualize else None # запуск визуализации
 

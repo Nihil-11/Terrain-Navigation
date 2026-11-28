@@ -130,7 +130,7 @@ class DroneSimulator:
             return 0.0
 
         if self.route_name == "snake":
-            return 0.25 * np.cos(2.0 * np.pi * t / 20.0)
+            return 0.25 * np.cos(2.0 * np.pi * t / 40.0)
 
         if self.route_name == "maneuver": #ai
             if 15.0 <= t < 17.0:
@@ -163,7 +163,7 @@ class DroneSimulator:
         
         true_range = self.true_z - ground
         lidar_std = self.noise_cfg["lidar_std"]
-        noise_range = true_range + self.rng.normal(0.0, lidar_std)
+        noise_range = true_range + self.rng.normal(0.0, lidar_std) # rng.normal выбирает шум сконцентрированный около нормы 0.0 
         return float(noise_range)
 
     def cast_ray(self, tilt_rad=0.0, azimuth_rad=0.0):
