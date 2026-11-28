@@ -100,7 +100,7 @@ class DroneSimulator:
     def __init__(self, height_map, route_name="straight", noise_cfg=None, seed=None):
         self.height_map = height_map
         self.route_name = route_name
-        self.noise_cfg = DEFAULT_NOISE_CFG if noise_cfg is None else noise_cfg #ai
+        self.noise_cfg = DEFAULT_NOISE_CFG if noise_cfg is None else noise_cfg 
         self.rng = np.random.default_rng(seed)
         self.speed = DRONE_FIXED_SPEED
         start_z = FIXED_ALTITUDE_Z
@@ -137,7 +137,7 @@ class DroneSimulator:
                 return np.pi / 4.0      # поворот на +90 град за 2 сек
             if 30.0 <= t < 33.0:
                 return -np.pi / 3.0     # разворот на -180 град за 3 сек
-            return 0.0
+            return 0.0 ##
 
         raise ValueError(f"Неизвестный маршрут: {self.route_name}") #ai
 
@@ -150,7 +150,7 @@ class DroneSimulator:
         accel_std = self.noise_cfg["accel_std"]
         gyro_std = self.noise_cfg["gyro_std"]
 
-        measured_dist = self.speed * DT + self.rng.normal(0.0, accel_std) #ai
+        measured_dist = self.speed * DT + self.rng.normal(0.0, accel_std) 
         measured_dyaw = (turn_rate + self.rng.normal(0.0, gyro_std)) * DT #ai
         return float(measured_dist), float(measured_dyaw)
 
