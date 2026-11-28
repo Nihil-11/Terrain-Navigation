@@ -70,8 +70,8 @@ class ParticleFilter:
         measured_dyaw: float, # изменение курса за шаг dt
         measured_dist: float, # измеренная дистанция
         dt: float = DT, # шаг времени
-        gyro_noise_std: float = GYRO_NOISE_STD, # стандартное отклонение шума гироскопа (угловой скорости)
-        accel_noise_std: float = ACCEL_NOISE_STD, # стандартное отклонение шума величины шага за такт (шум уск.)
+        gyro_noise_std: float = GYRO_NOISE_STD, # шум гироскопа (угловой скорости)
+        accel_noise_std: float = ACCEL_NOISE_STD, # шум величины шага за такт (шум уск.)
         rng: np.random.Generator | None = None,
     ):
         if rng is None: rng = np.random.default_rng()
