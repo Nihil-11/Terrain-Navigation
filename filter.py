@@ -71,6 +71,7 @@ class ParticleFilter:
     def predict(
         self,
         measured_dyaw: float, # изменение курса за шаг dt
+        measured_dist: float | None = None, # измеренная дистанция
         dt: float = DT, # шаг времени
         gyro_noise_std: float = GYRO_NOISE_STD, # стандартное отклонение шума гироскопа (угловой скорости)
         accel_noise_std: float = ACCEL_NOISE_STD, # стандартное отклонение шума величины шага за такт (шум уск.)
@@ -88,7 +89,7 @@ class ParticleFilter:
         new_yaw = wrap_angle(self.particles[:, 3] + measured_dyaw + yaw_noise)
 
         # шаг за dt при фиксированной скорости + индивидуальный шум для каждой частицы
-        base_dist = self.fixed_speed * dt
+        base_dist = self.fixed_speed * dt if measured_dist is None else float(measured_dist)
         dist_noise = (
             rng.normal(0.0, accel_noise_std, size=self.num_particles)
             if accel_noise_std > 0.0
@@ -164,10 +165,14 @@ class ParticleFilter:
             valid_sq_sum = np.sum(sq_diff[:, valid_ranges], axis=1)
             mse = valid_sq_sum / float(valid_counts)
 
+        # AI --------
+
         # Гауссово правдоподобие в логарифмах с численной стабилизацией
         log_w = -mse / (2.0 * (float(sigma_eff) ** 2))
         log_w = log_w - np.max(log_w)
         raw_w = np.exp(log_w)
+
+        # AI --------
 
         # распределение весов
         weight_sum = np.sum(raw_w)
