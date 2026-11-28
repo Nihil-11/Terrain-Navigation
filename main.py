@@ -20,8 +20,8 @@ def run_simulation(
 
     vis = DroneVisualizer(H) if visualize else None # запуск визуализации
 
-    lidar_0, start_yaw = sim.get_initial_measurement() # шаг t = 0: начальный скан лидара и спавн облака частиц
-    pf.initialize(start_yaw=start_yaw, rng=pf_rng)
+    lidar_0, start_yaw = sim.get_initial_measurement() # шаг t = 0: начальный скан лидара 
+    pf.initialize(start_yaw=start_yaw, rng=pf_rng) # спавн облака частиц
     pf.update_weights(lidar_0)
 
     est_state = pf.get_estimate() # оценку снимаем до resample пока веса еще не сброшены в 1/N
@@ -45,8 +45,10 @@ def run_simulation(
         pf.predict(measured_dyaw=measured_dyaw, measured_dist=measured_dist, rng=pf_rng)
         pf.update_weights(lidar_ranges)
 
-        est_state = pf.get_estimate()
+        est_state = pf.get_estimate() # оценку снимаем до resample пока веса еще не сброшены в 1/N
         pf.resample(rng=pf_rng) 
+
+        # вывод погрешностей
 
         true_state = sim.get_true_state()
         tx, ty, _, tyaw = true_state
