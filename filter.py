@@ -86,13 +86,12 @@ class ParticleFilter:
         new_yaw = wrap_angle(self.particles[:, 3] + measured_dyaw + yaw_noise)
 
         # шаг за dt при фиксированной скорости + индивидуальный шум для каждой частицы
-        base_dist = float(measured_dist)
         dist_noise = (
             rng.normal(0.0, accel_noise_std, size=self.num_particles)
             if accel_noise_std > 0.0
             else 0.0
         )
-        step_dist = base_dist + dist_noise
+        step_dist = float(measured_dist) + dist_noise
 
         # сдвиг в плоскости XY с ограничением по карте, z фиксирована на 550 м
         self.particles[:, 0] = np.clip(
